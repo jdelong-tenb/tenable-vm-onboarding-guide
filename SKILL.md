@@ -42,9 +42,19 @@ ask them to generate one if they don't have it, it takes under a minute).
 If the keys aren't set, ask the customer for them before doing anything else.
 Do not guess at account state — always check.
 
+**API key permission level matters.** Confirmed against a live account: a
+"Scan Manager"-level key (permissions 64) can read `/scanners` and `/scans` but
+gets a `403 Insufficient scope` on `/agents` — only "Administrator"-level keys
+(permissions 128) can list agents. The script handles this gracefully (each
+check fails independently, and a completed scan is treated as proof something
+was linked even if `/agents` errors), but if the customer's `agent_check_error`
+shows a 403, tell them agent-linkage status specifically can't be confirmed
+with their current key — not that no agent is linked. Suggest they generate an
+Administrator-level key if they need agent status confirmed.
+
 The script returns JSON with an `onboarding_stage` field: one of
-`fix_connectivity`, `link_scanner_or_agent`, `run_first_scan`,
-`review_scan_status`, `setup_tagging`, or `view_findings`.
+`fix_connectivity`, `check_linkage_error`, `link_scanner_or_agent`,
+`run_first_scan`, `review_scan_status`, `setup_tagging`, or `view_findings`.
 
 ## Step 2 — Guide based on stage
 
@@ -57,6 +67,20 @@ again from the machine that will actually host the scanner/agent (not
 necessarily this machine), and to confirm with their network team that
 outbound 443 to `cloud.tenable.com` is allowed. No inbound ports are required
 for agent or cloud-linked scanner connectivity.
+
+### `check_linkage_error`
+Both the `/scanners` and `/agents` checks failed (see `scanner_check_error` /
+`agent_check_error` in the output), and there's no completed-scan history to
+fall back on either. Look at the actual error text before saying anything to
+the customer:
+- A `403 Insufficient scope` on both usually means the API key's permission
+  level (Scan Manager or lower) can't read sensor data at all — ask them for
+  an Administrator-level key, or check status themselves in Settings > Sensors.
+- Any other error (401, 5xx, timeout) is worth re-running once before assuming
+  it's a key problem — could be transient.
+- Do not tell the customer "you haven't linked anything" here — that's the
+  `link_scanner_or_agent` stage, and it means something different: this stage
+  means the check itself failed, not that linkage was confirmed absent.
 
 ### `link_scanner_or_agent`
 Connectivity is fine, but neither a network scanner nor an agent is linked. Ask
@@ -89,12 +113,20 @@ starting over — Scans > [scan] > Configure covers policy changes without
 needing a new scan.
 
 ### `review_scan_status`
-A scan completed but returned no vulnerabilities (or the API check errored).
-This is either genuinely a clean scan target (small/well-patched target — tell
-them that's a good sign but suggest scanning a larger or more representative
-range) or the scan errored/was misconfigured — check `most_recent_scan_status`
-in the script output and look at the scan's own error detail in the UI if it
-isn't `completed`.
+A scan exists but either returned no vulnerabilities, or its
+`most_recent_scan_status` isn't `completed`. Check that status field first:
+- **`completed` with 0 vulns:** genuinely a clean scan target (small or
+  well-patched — tell them that's a good sign, but suggest scanning a larger
+  or more representative range to actually exercise the product) or the vuln
+  check itself errored (`open_vuln_count_last_30d: null` — re-run the check).
+- **`canceled`:** the scan didn't run to completion — often means it was
+  stopped manually or timed out against an unreachable target. Ask them to
+  re-launch it rather than troubleshooting the cancel itself; if it cancels
+  again, that usually points back to scanner/agent connectivity to the scan
+  target, not the Tenable platform.
+- **`aborted` / other error status:** look at the scan's own error detail in
+  the UI (Scans > [scan] > click in for the failure reason) — don't guess at
+  the cause from the API status string alone.
 
 ### `setup_tagging`
 Scanning and findings are working, but no tags are defined yet. This is where

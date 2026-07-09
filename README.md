@@ -33,12 +33,15 @@ personalization, and gamification are out of scope — see
 - Python 3 (stdlib only — no dependencies to install).
 - A Tenable Vulnerability Management account with API access. Generate an API
   key pair under **Settings > My Account > API Keys** — takes under a minute.
+  **Note:** an Administrator-level key is required to check agent status;
+  Scan Manager-level keys get a `403 Insufficient scope` on `/agents` (network
+  scanner and scan-history checks work fine at that level).
 
 ## How to run
 
 1. Copy or symlink this directory into your Claude Code skills path, e.g.:
    ```bash
-   cp -r vm-onboarding-guide ~/.claude/skills/
+   cp -r tenable-vm-onboarding-guide ~/.claude/skills/
    ```
 2. Set your API credentials:
    ```bash
@@ -71,6 +74,14 @@ The status script prints JSON, e.g.:
   "onboarding_stage": "view_findings"
 }
 ```
+
+This example shows a fully healthy account. In practice, `scanner_linked` /
+`agent_linked` may be missing entirely rather than `false` — if a check's API
+call fails (e.g. a Scan Manager-level key hitting `403` on `/agents`), the
+script reports `scanner_check_error` / `agent_check_error` instead and falls
+back to scan history to infer linkage. If both checks fail and there's no
+completed scan to fall back on, `onboarding_stage` is `check_linkage_error`,
+not `link_scanner_or_agent` — those mean different things (see SKILL.md).
 
 The skill then uses `onboarding_stage` to decide what to say next.
 

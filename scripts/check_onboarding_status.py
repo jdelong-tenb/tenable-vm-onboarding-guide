@@ -44,15 +44,20 @@ def api_get(path, access_key, secret_key):
         raise RuntimeError(f"API error {e.code} on {path}: {body[:300]}") from e
 
 
-def check_scanners(access_key, secret_key):
-    """Returns (has_network_scanner, has_agent, scanner_count, agent_count)."""
+def check_network_scanners(access_key, secret_key):
+    """Returns (has_network_scanner, scanner_count). Raises RuntimeError on API failure."""
     data = api_get("/scanners", access_key, secret_key)
     scanners = data.get("scanners", [])
     network = [s for s in scanners if s.get("type") != "agent" and s.get("status") == "on"]
+    return (len(network) > 0, len(network))
+
+
+def check_agents(access_key, secret_key):
+    """Returns (has_agent, agent_count). Raises RuntimeError on API failure."""
     agents_data = api_get("/agents", access_key, secret_key)
     agents = agents_data.get("agents", [])
     linked_agents = [a for a in agents if a.get("status") in ("on", "online")]
-    return (len(network) > 0, len(linked_agents) > 0, len(network), len(linked_agents))
+    return (len(linked_agents) > 0, len(linked_agents))
 
 
 def check_scans(access_key, secret_key):
@@ -108,15 +113,20 @@ def main():
         return
     result["connectivity_ok"] = True
 
+    has_network = has_agent = None  # None = check failed, status unknown
     try:
-        has_network, has_agent, scanner_count, agent_count = check_scanners(access_key, secret_key)
+        has_network, scanner_count = check_network_scanners(access_key, secret_key)
         result["scanner_linked"] = has_network
-        result["agent_linked"] = has_agent
         result["linked_scanner_count"] = scanner_count
-        result["linked_agent_count"] = agent_count
     except RuntimeError as e:
         result["scanner_check_error"] = str(e)
-        has_network = has_agent = False
+
+    try:
+        has_agent, agent_count = check_agents(access_key, secret_key)
+        result["agent_linked"] = has_agent
+        result["linked_agent_count"] = agent_count
+    except RuntimeError as e:
+        result["agent_check_error"] = str(e)
 
     try:
         has_completed, recent_name, recent_status = check_scans(access_key, secret_key)
@@ -127,15 +137,27 @@ def main():
         result["scan_check_error"] = str(e)
         has_completed = False
 
+    # A completed scan proves something scanning-capable was linked at some point,
+    # even if the live scanner/agent check above errored (e.g. an API key with
+    # insufficient scope for /agents). Don't tell a customer to "link a
+    # scanner/agent" when their scan history already contradicts that.
+    linked = bool(has_network) or bool(has_agent) or has_completed
+
+    both_checks_failed = has_network is None and has_agent is None
+    if both_checks_failed and not has_completed:
+        result["onboarding_stage"] = "check_linkage_error"
+        print(json.dumps(result, indent=2))
+        return
+
     vuln_count = None
-    if has_network or has_agent:
+    if linked:
         vuln_count = check_findings(access_key, secret_key)
         result["open_vuln_count_last_30d"] = vuln_count
 
     if has_completed:
         result["tag_count"] = check_tags(access_key, secret_key)
 
-    if not (has_network or has_agent):
+    if not linked:
         stage = "link_scanner_or_agent"
     elif not has_completed:
         stage = "run_first_scan"

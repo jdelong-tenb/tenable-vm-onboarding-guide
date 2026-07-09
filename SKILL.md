@@ -1,6 +1,6 @@
 ---
 name: vm-onboarding-guide
-description: Walks a new Tenable Vulnerability Management customer through onboarding — checking whether they've linked a scanner/agent, run a scan, and reviewed findings — and guides them through whichever step they're stuck on. Invoke when a customer says things like "I just signed up for Tenable," "how do I get started," "I ran a scan but don't see anything," or "I'm stuck setting up my scanner."
+description: Walks a new Tenable Vulnerability Management customer through onboarding — connectivity, scanner/agent linkage, first scan, findings, and tagging — and guides them through whichever step they're stuck on. Invoke when a customer says things like "I just signed up for Tenable," "how do I get started," "I ran a scan but don't see anything," "my scanner won't link," or "how do I set up tags."
 ---
 
 # VM Onboarding Guide
@@ -8,16 +8,24 @@ description: Walks a new Tenable Vulnerability Management customer through onboa
 ## Why this exists
 
 New Tenable Vulnerability Management customers drop off hard in the first 90 days.
-Fleet-wide data (see `~/work/hexa_onboarding_analysis/` if available) shows most
-customers who get stuck do so at one of two points: they never link a scanner or
-agent, or they run a scan but never look at the results. This skill checks a
-customer's actual account state via the Tenable Vulnerability Management API and
-walks them through whatever step comes next — instead of generic documentation
-that doesn't know where they are.
+Fleet-wide data (see `~/work/hexa_onboarding_analysis/` if available) shows:
+65% fail onboarding within 90 days, and the single biggest cliff is scanner/agent
+linkage — most customers never link one at all. Of those who do scan, most never
+look at the results (the "scan-to-findings" cliff). This skill checks a customer's
+actual account state via the Tenable Vulnerability Management API and walks them
+through whatever step comes next — instead of generic documentation that doesn't
+know where they are.
 
-**Scope (Phase 1 only):** this skill covers scanner/agent linkage and first-scan
-guidance. It does not do tagging, dashboard setup, or role-based personalization —
-those are separate, larger workstreams (see Known Limitations).
+**Scope:** the five highest-impact steps identified in the onboarding gap analysis:
+1. Connectivity (can they reach Tenable's cloud at all)
+2. Scanner/agent linkage (the biggest cliff)
+3. First scan + policy configuration
+4. Scan-to-findings milestone bridge (the #1 tracked gap — no other tooling
+   anywhere detects "scanned but never viewed findings")
+5. Tagging setup (delegated to Hexa MCP where available — see Step 3 below)
+
+Dashboards, role-based personalization, and gamification are explicitly out of
+scope — see Known Limitations.
 
 ## Step 1 — Check account status
 
@@ -35,13 +43,24 @@ If the keys aren't set, ask the customer for them before doing anything else.
 Do not guess at account state — always check.
 
 The script returns JSON with an `onboarding_stage` field: one of
-`link_scanner_or_agent`, `run_first_scan`, `review_scan_status`, or
-`view_findings`.
+`fix_connectivity`, `link_scanner_or_agent`, `run_first_scan`,
+`review_scan_status`, `setup_tagging`, or `view_findings`.
 
 ## Step 2 — Guide based on stage
 
+### `fix_connectivity`
+`cloud.tenable.com:443` isn't reachable from wherever this check ran. Nothing
+else downstream — scanner linking, agent check-in, scanning — will work until
+this is fixed. This is almost always a firewall/proxy blocking outbound 443 on
+the customer's network, not a Tenable-side issue. Ask them to run the check
+again from the machine that will actually host the scanner/agent (not
+necessarily this machine), and to confirm with their network team that
+outbound 443 to `cloud.tenable.com` is allowed. No inbound ports are required
+for agent or cloud-linked scanner connectivity.
+
 ### `link_scanner_or_agent`
-Neither a network scanner nor an agent is linked. Ask which fits their environment:
+Connectivity is fine, but neither a network scanner nor an agent is linked. Ask
+which fits their environment:
 - **Agent** (recommended for laptops/workstations, anything mobile, or if they
   want the fastest path to a first scan): direct them to download the Nessus
   Agent from Settings > Sensors, and to generate a linking key from the same
@@ -51,9 +70,10 @@ Neither a network scanner nor an agent is linked. Ask which fits their environme
   they don't want to install software on individually): direct them to deploy a
   Tenable Core scanner appliance or Nessus scanner, then link it with a linking
   key from Settings > Sensors.
-- If they hit a connectivity problem (can't reach `cloud.tenable.com`), that's a
-  firewall/proxy issue on their end — ports 443 outbound, no on-prem inbound
-  needed for agent or cloud-linked scanners.
+- If they hit a connectivity problem specifically at this step (can't reach
+  `cloud.tenable.com` from the scanner/agent host even though Step 1 passed
+  elsewhere), that's a firewall/proxy issue local to that host, not their
+  whole network.
 
 Re-run the status check after they say they've linked something, don't just take
 their word for it.
@@ -63,7 +83,10 @@ Something is linked but no scan has completed. Guide them to run a basic
 scan — a "Basic Network Scan" template pointed at whatever the linked
 scanner/agent can see is the fastest path to real results. Avoid recommending
 advanced/credentialed scan templates for a first scan; save that for later once
-they've seen the product work end to end.
+they've seen the product work end to end. If they already have a scan running
+or configured but it's not the right template, help them reconfigure rather than
+starting over — Scans > [scan] > Configure covers policy changes without
+needing a new scan.
 
 ### `review_scan_status`
 A scan completed but returned no vulnerabilities (or the API check errored).
@@ -72,6 +95,22 @@ them that's a good sign but suggest scanning a larger or more representative
 range) or the scan errored/was misconfigured — check `most_recent_scan_status`
 in the script output and look at the scan's own error detail in the UI if it
 isn't `completed`.
+
+### `setup_tagging`
+Scanning and findings are working, but no tags are defined yet. This is where
+Hexa is actually strong — offer it as the faster path rather than walking them
+through the CSV-upload UI manually:
+- If Hexa MCP tools are available in this session, tell the customer Hexa can
+  take a CSV of names + IP ranges (or business-unit/device-name patterns) and
+  create the tags directly, or auto-suggest tags from OS/asset data already in
+  their scan results — ask if they'd like to try that path.
+- If Hexa MCP isn't available, fall back to: Settings > Tags > download the CSV
+  template, fill in name + IP range pairs, upload it back. Environment
+  (Prod/Dev/Staging), OS type, and business unit are the three tagging
+  dimensions worth setting up first.
+- Tagging isn't a hard blocker to viewing findings — mention it's available but
+  don't block the `view_findings` conversation on it if the customer just wants
+  to see their results first.
 
 ### `view_findings`
 Everything is working — scanner/agent linked, a scan completed, and there are
@@ -85,13 +124,18 @@ exploring on their own from here.
 
 ## Known limitations (do not overclaim these)
 
-- **No tagging, dashboard, or role-personalization guidance.** Out of scope for
-  this skill — those need their own workstream (tagging is a Hexa "Can Do" per
-  the internal gap analysis, but isn't wired into this skill yet).
-- **No persistent milestone tracking.** This skill checks live state each time
-  it's invoked; it does not remember where a customer left off between sessions
-  or notify anyone proactively. Full persistence is a larger backend investment
-  (internally scoped as "Phase 3," no committed timeline as of this writing).
+- **No dashboard or role-personalization guidance.** Out of scope for this
+  skill — those need their own workstream (dashboard/role-based routing is a
+  Hexa "Partial" per the internal gap analysis, but isn't wired into this
+  skill yet).
+- **No gamification or progress badges.** Not attempted — the gap analysis
+  rates this "Cannot Do" today for Hexa and it's XL effort; not part of this
+  skill's scope.
+- **No persistent milestone tracking across sessions.** This skill checks live
+  state each time it's invoked; it does not remember where a customer left off
+  between sessions or notify anyone proactively. The scan-to-findings bridge
+  (Step 2's `run_first_scan` → `review_scan_status` → `view_findings`
+  progression) is inferred fresh each run from live API state, not stored.
 - **The API can't see UI navigation.** `view_findings` stage is inferred from
   "a scan completed and vulnerabilities exist," not from confirming the customer
   actually opened the Findings page. Don't tell a customer "you've viewed your
@@ -102,13 +146,29 @@ exploring on their own from here.
   `/agents`, but this hasn't been validated against a real cloud-connector-only
   account. Flag this to the customer as "let me know if this doesn't match what
   you're seeing" rather than asserting certainty.
+- **Tagging delegation to Hexa MCP is opportunistic, not guaranteed.** This
+  skill doesn't ship its own tagging logic — it hands off to Hexa MCP tools
+  when they're present in the session and falls back to manual CSV-upload
+  instructions when they're not. It does not verify Hexa MCP's tag creation
+  succeeded; if the customer says a Hexa-created tag isn't showing up, re-run
+  the status check rather than assuming success.
 
 ## Design notes for anyone extending this
 
-This intentionally talks to the customer's own Tenable Vulnerability Management
-API directly rather than depending on any internal Hexa MCP tooling — as of this
-writing, Hexa's MCP server does not have scanner/agent linkage verification
-tools (`get_linking_key` / `check_scanner_linked` were proposed, not built). If
-those ship later, swap `scripts/check_onboarding_status.py`'s API calls for the
-equivalent Hexa MCP tool calls, but keep the stage-based guidance logic in this
-file — it's the reusable part.
+Connectivity, scanner/agent linkage, first-scan, and milestone-bridge checks all
+talk to the customer's own Tenable Vulnerability Management API directly rather
+than depending on internal Hexa MCP tooling — as of this writing, Hexa's MCP
+server does not have scanner/agent linkage verification tools
+(`get_linking_key` / `check_scanner_linked` were proposed, not built; see
+`~/work/hexa_onboarding_analysis/data/gap_matrix.csv` rows 2.3/2.4/3.8, all rated
+Partial or Cannot Do). If those ship later, swap
+`scripts/check_onboarding_status.py`'s API calls for the equivalent Hexa MCP tool
+calls, but keep the stage-based guidance logic in this file — it's the reusable
+part.
+
+Tagging is the one exception: per the gap analysis, Hexa's Tagging skill (15
+tools, CSV/XLSX parsing via `SpreadsheetParser`, `create_tag`,
+`get_recommended_tags`) is rated **Can Do today**, confirmed working end-to-end
+in manual testing. That's why `setup_tagging` guidance defers to Hexa MCP
+instead of reimplementing CSV parsing here — duplicating a capability Hexa
+already has would just create two divergent tagging paths.

@@ -1,24 +1,30 @@
 # VM Onboarding Guide
 
 A Claude Code skill that checks a Tenable Vulnerability Management customer's
-real account state — scanner/agent linkage, first scan, findings — and guides
-them through whichever onboarding step they're stuck on, instead of pointing
-them at generic documentation.
+real account state — connectivity, scanner/agent linkage, first scan, findings,
+tagging — and guides them through whichever onboarding step they're stuck on,
+instead of pointing them at generic documentation.
 
 ## What it does
 
-New Tenable VM customers who don't link a scanner or agent, or who scan but
-never look at results, tend to churn in the first 90 days. This skill:
+65% of new Tenable VM customers fail onboarding within 90 days. The biggest
+single cliff is scanner/agent linkage; the second-biggest is customers who scan
+but never look at results. This skill:
 
 1. Checks the customer's account via the Tenable Vulnerability Management API
-   (scanners, agents, scans, vulnerability workbench).
-2. Determines which onboarding stage they're stuck at: linking a scanner/agent,
-   running a first scan, or viewing findings.
+   (connectivity, scanners, agents, scans, vulnerability workbench, tags).
+2. Determines which onboarding stage they're stuck at: fixing connectivity,
+   linking a scanner/agent, running a first scan, reviewing scan status,
+   setting up tagging, or viewing findings.
 3. Walks them through that specific step conversationally, re-checking real
-   account state rather than trusting "I did it" at face value.
+   account state rather than trusting "I did it" at face value. For tagging,
+   it hands off to Hexa MCP tools when available (Hexa's Tagging skill already
+   does this well) rather than duplicating that logic.
 
-**Scope:** scanner/agent linkage and first-scan guidance only (Phase 1). Tagging,
-dashboards, and role-based personalization are out of scope — see
+**Scope:** the five highest-impact onboarding steps identified by fleet-wide
+funnel analysis — connectivity, scanner/agent linkage, first scan, the
+scan-to-findings milestone bridge, and tagging setup. Dashboards, role-based
+personalization, and gamification are out of scope — see
 [Known Limitations](SKILL.md#known-limitations-do-not-overclaim-these).
 
 ## Prerequisites
@@ -53,6 +59,7 @@ python3 scripts/check_onboarding_status.py
 The status script prints JSON, e.g.:
 ```json
 {
+  "connectivity_ok": true,
   "scanner_linked": false,
   "agent_linked": true,
   "linked_agent_count": 1,
@@ -60,6 +67,7 @@ The status script prints JSON, e.g.:
   "most_recent_scan_name": "Basic Network Scan",
   "most_recent_scan_status": "completed",
   "open_vuln_count_last_30d": 42,
+  "tag_count": 3,
   "onboarding_stage": "view_findings"
 }
 ```

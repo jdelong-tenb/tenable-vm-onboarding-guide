@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Checks a Tenable Vulnerability Management container's onboarding status against
-the public API: scanner/agent linkage, first scan, and recent scan results.
+the public API: connectivity, scanner/agent linkage, first scan, and recent
+scan results.
 
 Auth: TIO_ACCESS_KEY / TIO_SECRET_KEY env vars (API keys, not a password).
 Stdlib only — no third-party dependencies.
@@ -9,11 +10,25 @@ Stdlib only — no third-party dependencies.
 
 import json
 import os
+import socket
 import sys
 import urllib.request
 import urllib.error
 
 API_BASE = "https://cloud.tenable.com"
+API_HOST = "cloud.tenable.com"
+
+
+def check_connectivity():
+    """Returns True if cloud.tenable.com:443 is reachable from this machine.
+    A failure here means every downstream check will also fail — this is the
+    prerequisite gate (firewall/proxy blocking outbound 443), not a scanner
+    or agent problem."""
+    try:
+        with socket.create_connection((API_HOST, 443), timeout=5):
+            return True
+    except OSError:
+        return False
 
 
 def api_get(path, access_key, secret_key):
@@ -63,6 +78,18 @@ def check_findings(access_key, secret_key):
         return None
 
 
+def check_tags(access_key, secret_key):
+    """Returns the count of tag category/value pairs defined on the container, as
+    a proxy for whether any tagging strategy has been set up. Tagging setup itself
+    (CSV import, OS auto-tagging, business-unit rules) is delegated to Hexa MCP
+    where available — this check only tells the skill whether to offer that step."""
+    try:
+        data = api_get("/tags/values?limit=1", access_key, secret_key)
+        return data.get("pagination", {}).get("total", len(data.get("values", [])))
+    except RuntimeError:
+        return None
+
+
 def main():
     access_key = os.environ.get("TIO_ACCESS_KEY")
     secret_key = os.environ.get("TIO_SECRET_KEY")
@@ -73,6 +100,14 @@ def main():
         sys.exit(1)
 
     result = {}
+
+    if not check_connectivity():
+        result["connectivity_ok"] = False
+        result["onboarding_stage"] = "fix_connectivity"
+        print(json.dumps(result, indent=2))
+        return
+    result["connectivity_ok"] = True
+
     try:
         has_network, has_agent, scanner_count, agent_count = check_scanners(access_key, secret_key)
         result["scanner_linked"] = has_network
@@ -92,16 +127,22 @@ def main():
         result["scan_check_error"] = str(e)
         has_completed = False
 
+    vuln_count = None
     if has_network or has_agent:
         vuln_count = check_findings(access_key, secret_key)
         result["open_vuln_count_last_30d"] = vuln_count
+
+    if has_completed:
+        result["tag_count"] = check_tags(access_key, secret_key)
 
     if not (has_network or has_agent):
         stage = "link_scanner_or_agent"
     elif not has_completed:
         stage = "run_first_scan"
-    elif result.get("open_vuln_count_last_30d") in (0, None):
+    elif vuln_count in (0, None):
         stage = "review_scan_status"
+    elif not result.get("tag_count"):
+        stage = "setup_tagging"
     else:
         stage = "view_findings"
 

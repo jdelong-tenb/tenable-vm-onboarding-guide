@@ -8,21 +8,38 @@ description: Walks a new Tenable Vulnerability Management customer through onboa
 ## Why this exists
 
 New Tenable Vulnerability Management customers drop off hard in the first 90 days.
-Fleet-wide data (see `~/work/hexa_onboarding_analysis/` if available) shows:
-65% fail onboarding within 90 days, and the single biggest cliff is scanner/agent
-linkage — most customers never link one at all. Of those who do scan, most never
-look at the results (the "scan-to-findings" cliff). This skill checks a customer's
-actual account state via the Tenable Vulnerability Management API and walks them
-through whatever step comes next — instead of generic documentation that doesn't
-know where they are.
+An internal Tenable fleet-wide funnel analysis (Q1 2026, not published in this
+repo — ask your Tenable contact if you want the underlying numbers) found that
+most new customers fail onboarding within 90 days, and the single biggest cliff
+is scanner/agent linkage — most customers never link one at all. Of those who do
+scan, most never look at the results (the "scan-to-findings" cliff). This skill
+checks a customer's actual account state via the Tenable Vulnerability Management
+API and walks them through whatever step comes next — instead of generic
+documentation that doesn't know where they are.
 
-**Scope:** the five highest-impact steps identified in the onboarding gap analysis:
+This skill is **not official Tenable support** and isn't a substitute for it —
+it's a community-built Claude Code skill that reads your own account via the
+public API and gives best-effort guidance. If something looks wrong or you're
+stuck, Tenable Support and your account team are the authoritative path.
+
+**Scope:** five onboarding steps, chosen for impact based on that funnel analysis:
 1. Connectivity (can they reach Tenable's cloud at all)
 2. Scanner/agent linkage (the biggest cliff)
 3. First scan + policy configuration
-4. Scan-to-findings milestone bridge (the #1 tracked gap — no other tooling
-   anywhere detects "scanned but never viewed findings")
+4. Scan-to-findings milestone bridge (no other tooling detects "scanned but
+   never viewed findings")
 5. Tagging setup (delegated to Hexa MCP where available — see Step 3 below)
+
+**Scale assumption:** this skill's checks (most-recent-scan status, a single
+linked/not-linked verdict, one vuln count) are calibrated for a customer with a
+handful of scanners/agents and a small scan history — the normal shape of a
+brand-new account. On an established enterprise account with dozens of
+scanners and a large scan history, "the most recent scan across the whole
+account failed" is a much weaker signal — it could be one abandoned ad-hoc scan
+while hundreds of others succeeded. If a customer clearly has an established
+fleet rather than a fresh signup, treat this skill's verdicts as a rough
+starting point, not a diagnosis, and ask what they're actually seeing before
+trusting the stage label.
 
 Dashboards, role-based personalization, and gamification are explicitly out of
 scope — see Known Limitations.
@@ -67,6 +84,13 @@ again from the machine that will actually host the scanner/agent (not
 necessarily this machine), and to confirm with their network team that
 outbound 443 to `cloud.tenable.com` is allowed. No inbound ports are required
 for agent or cloud-linked scanner connectivity.
+
+Note: `connectivity_ok: true` only proves a bare TCP handshake succeeded — it
+doesn't prove the actual HTTPS API calls will work. A TLS-intercepting proxy
+can pass this check and still break every downstream call. If `connectivity_ok`
+is `true` but every other check errors with something other than a clean 401/403
+(timeouts, SSL errors, malformed responses), suspect a TLS-inspecting proxy on
+the customer's network rather than trusting connectivity is fully fine.
 
 ### `check_linkage_error`
 Both the `/scanners` and `/agents` checks failed (see `scanner_check_error` /
@@ -113,12 +137,19 @@ starting over — Scans > [scan] > Configure covers policy changes without
 needing a new scan.
 
 ### `review_scan_status`
-A scan exists but either returned no vulnerabilities, or its
-`most_recent_scan_status` isn't `completed`. Check that status field first:
-- **`completed` with 0 vulns:** genuinely a clean scan target (small or
-  well-patched — tell them that's a good sign, but suggest scanning a larger
-  or more representative range to actually exercise the product) or the vuln
-  check itself errored (`open_vuln_count_last_30d: null` — re-run the check).
+A scan exists but either the most recent one didn't complete cleanly, or the
+findings/tag checks came back empty or errored. Check the specific fields:
+- **`most_recent_scan_status` isn't `completed`:** this takes priority — a
+  customer can have a long history of successful scans and still have their
+  latest one fail. See the status-specific guidance below.
+- **`completed` with `open_vuln_count_last_30d: 0`:** genuinely a clean scan
+  target (small or well-patched — tell them that's a good sign, but suggest
+  scanning a larger or more representative range to actually exercise the
+  product).
+- **`vuln_check_error` present instead of a count:** the findings check itself
+  failed (e.g. permission issue) — re-run the check rather than telling the
+  customer their scan came back clean. An errored check is not evidence of a
+  clean environment.
 - **`canceled`:** the scan didn't run to completion — often means it was
   stopped manually or timed out against an unreachable target. Ask them to
   re-launch it rather than troubleshooting the cancel itself; if it cancels
@@ -131,11 +162,24 @@ A scan exists but either returned no vulnerabilities, or its
 ### `setup_tagging`
 Scanning and findings are working, but no tags are defined yet. This is where
 Hexa is actually strong — offer it as the faster path rather than walking them
-through the CSV-upload UI manually:
-- If Hexa MCP tools are available in this session, tell the customer Hexa can
-  take a CSV of names + IP ranges (or business-unit/device-name patterns) and
-  create the tags directly, or auto-suggest tags from OS/asset data already in
-  their scan results — ask if they'd like to try that path.
+through the CSV-upload UI manually. But first, check who you're actually
+talking to: Hexa MCP tools being available in *this* session only tells you
+what's installed here — it does not mean the customer knows what Hexa is. If a
+Tenable employee (support engineer, SE, CSM) is running this skill on a
+customer's behalf, their own session may have Hexa MCP loaded even though the
+customer has never heard the name. Don't drop "Hexa" into a conversation with
+an end customer who didn't bring it up themselves; instead:
+- If you're talking directly with the customer, either don't name Hexa at all
+  ("there's a faster way to set this up than the CSV template — want me to
+  build it from your existing scan data?") or introduce it briefly ("Tenable
+  has an AI assistant called Hexa that can do this from a CSV or your scan
+  data automatically") before using it.
+- If you're clearly acting as an internal Tenable user setting this up on a
+  customer's behalf, it's fine to reference Hexa directly.
+- If Hexa MCP tools are available in this session, they can take a CSV of
+  names + IP ranges (or business-unit/device-name patterns) and create the
+  tags directly, or auto-suggest tags from OS/asset data already in their scan
+  results — ask if they'd like to try that path.
 - If Hexa MCP isn't available, fall back to: Settings > Tags > download the CSV
   template, fill in name + IP range pairs, upload it back. Environment
   (Prod/Dev/Staging), OS type, and business unit are the three tagging
@@ -184,6 +228,22 @@ exploring on their own from here.
   instructions when they're not. It does not verify Hexa MCP's tag creation
   succeeded; if the customer says a Hexa-created tag isn't showing up, re-run
   the status check rather than assuming success.
+- **Connectivity check is TCP-only, not a full API health check.** `check_connectivity()`
+  only confirms a bare TCP handshake to `cloud.tenable.com:443` — it doesn't
+  validate TLS or exercise the actual API. A TLS-intercepting proxy can pass
+  this check while still breaking every downstream call. See the note under
+  `fix_connectivity` above.
+- **A failed check is not the same as a confirmed-empty result.** `scanner_check_error`,
+  `agent_check_error`, `vuln_check_error`, and `tag_check_error` all mean the
+  check itself didn't run to completion — not that the underlying thing is
+  absent. Don't tell a customer "you have no vulnerabilities" or "no tags are
+  set up" if the corresponding `*_check_error` field is present instead of a
+  count; tell them the check couldn't run and offer to re-run it.
+- **Calibrated for new accounts, not fleet-scale ones.** The stage logic looks
+  at one "most recent scan" and a handful of aggregate counts across the whole
+  account. On an established account with a large scanner fleet and scan
+  history, these are weak signals — see the Scale assumption note in "Why this
+  exists" above.
 
 ## Design notes for anyone extending this
 

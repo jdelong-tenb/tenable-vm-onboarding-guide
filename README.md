@@ -7,9 +7,10 @@ instead of pointing them at generic documentation.
 
 ## What it does
 
-65% of new Tenable VM customers fail onboarding within 90 days. The biggest
-single cliff is scanner/agent linkage; the second-biggest is customers who scan
-but never look at results. This skill:
+Most new Tenable VM customers fail onboarding within 90 days, per internal
+fleet-wide funnel analysis. The biggest single cliff is scanner/agent linkage;
+the second-biggest is customers who scan but never look at results. This
+skill:
 
 1. Checks the customer's account via the Tenable Vulnerability Management API
    (connectivity, scanners, agents, scans, vulnerability workbench, tags).
@@ -21,8 +22,13 @@ but never look at results. This skill:
    it hands off to Hexa MCP tools when available (Hexa's Tagging skill already
    does this well) rather than duplicating that logic.
 
-**Scope:** the five highest-impact onboarding steps identified by fleet-wide
-funnel analysis — connectivity, scanner/agent linkage, first scan, the
+This is a community-built skill, not official Tenable support — it reads your
+own account via the public API and gives best-effort guidance. It's calibrated
+for a brand-new account with a small scan history; see SKILL.md for the scale
+caveat on established accounts.
+
+**Scope:** five onboarding steps chosen for impact based on that funnel
+analysis — connectivity, scanner/agent linkage, first scan, the
 scan-to-findings milestone bridge, and tagging setup. Dashboards, role-based
 personalization, and gamification are out of scope — see
 [Known Limitations](SKILL.md#known-limitations-do-not-overclaim-these).
@@ -55,6 +61,11 @@ personalization, and gamification are out of scope — see
 You can also run the status check directly, outside the skill:
 ```bash
 python3 scripts/check_onboarding_status.py
+```
+
+Run the unit tests (mocked API responses, no credentials needed):
+```bash
+cd scripts && python3 test_check_onboarding_status.py
 ```
 
 ## What it outputs

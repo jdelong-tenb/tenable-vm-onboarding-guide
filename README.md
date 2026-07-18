@@ -1,23 +1,24 @@
 # VM Onboarding Guide
 
-A Claude Code skill that checks a Tenable Vulnerability Management customer's
-real account state — connectivity, scanner/agent linkage, first scan, findings,
-tagging — and guides them through whichever onboarding step they're stuck on,
-instead of pointing them at generic documentation.
+A Claude Code skill that checks your Tenable Vulnerability Management
+account's real state — connectivity, scanner/agent linkage, first scan,
+findings, tagging — and walks you through whichever onboarding step you're
+stuck on, instead of pointing you at generic documentation.
 
 ## What it does
 
-Most new Tenable VM customers fail onboarding within 90 days, per internal
-fleet-wide funnel analysis. The biggest single cliff is scanner/agent linkage;
-the second-biggest is customers who scan but never look at results. This
-skill:
+Generic onboarding docs don't know where you actually are — whether you've
+linked a scanner yet, whether your first scan finished, or whether you've
+looked at the results. In practice, the steps people get stuck on most are
+scanner/agent linkage, and — for those who do scan — actually looking at the
+results afterward (the "scan-to-findings" gap). This skill:
 
-1. Checks the customer's account via the Tenable Vulnerability Management API
+1. Checks your account via the Tenable Vulnerability Management API
    (connectivity, scanners, agents, scans, vulnerability workbench, tags).
-2. Determines which onboarding stage they're stuck at: fixing connectivity,
+2. Determines which onboarding stage you're at: fixing connectivity,
    linking a scanner/agent, running a first scan, reviewing scan status,
    setting up tagging, or viewing findings.
-3. Walks them through that specific step conversationally, re-checking real
+3. Walks you through that specific step conversationally, re-checking real
    account state rather than trusting "I did it" at face value. For tagging,
    it hands off to Hexa MCP tools when available (Hexa's Tagging skill already
    does this well) rather than duplicating that logic.
@@ -27,10 +28,10 @@ own account via the public API and gives best-effort guidance. It's calibrated
 for a brand-new account with a small scan history; see SKILL.md for the scale
 caveat on established accounts.
 
-**Scope:** five onboarding steps chosen for impact based on that funnel
-analysis — connectivity, scanner/agent linkage, first scan, the
-scan-to-findings milestone bridge, and tagging setup. Dashboards, role-based
-personalization, and gamification are out of scope — see
+**Scope:** five onboarding steps that most commonly trip people up —
+connectivity, scanner/agent linkage, first scan, the scan-to-findings
+milestone bridge, and tagging setup. Dashboards, role-based personalization,
+and gamification are out of scope — see
 [Known Limitations](SKILL.md#known-limitations-do-not-overclaim-these).
 
 ## Prerequisites
@@ -100,7 +101,7 @@ The skill then uses `onboarding_stage` to decide what to say next.
 
 See the [Known Limitations section in SKILL.md](SKILL.md#known-limitations-do-not-overclaim-these)
 for the full list — most importantly: the API can confirm a scan ran and
-vulnerabilities exist, but it cannot confirm the customer actually opened the
+vulnerabilities exist, but it cannot confirm you actually opened the
 Findings page. This skill infers "ready to view," not "viewed."
 
 ## License

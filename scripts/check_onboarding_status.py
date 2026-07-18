@@ -88,7 +88,7 @@ def check_scans(access_key, secret_key):
     """Returns (has_completed_scan, most_recent_scan_name, most_recent_scan_status).
     has_completed_scan reflects scan history overall (any completed scan, ever);
     most_recent_scan_status reflects only the latest scan and can disagree with
-    it — e.g. a customer with a clean scan history whose latest scan just got
+    it — e.g. a user with a clean scan history whose latest scan just got
     canceled. Callers should check both, not treat historical success as proof
     the most recent scan is fine."""
     data = api_get("/scans", access_key, secret_key)
@@ -103,7 +103,7 @@ def check_scans(access_key, secret_key):
 def check_findings(access_key, secret_key):
     """Returns approximate open vulnerability count via the vulns workbench, as a
     proxy for whether there is anything to view. This does NOT measure whether the
-    customer has actually looked at the Findings/Explore UI — the API cannot see
+    user has actually looked at the Findings/Explore UI — the API cannot see
     UI navigation. Treat this purely as 'is there something waiting for them.'
     Raises RuntimeError on API failure — the caller distinguishes a confirmed
     zero count from a check that couldn't run."""
@@ -172,7 +172,7 @@ def main():
 
     # A completed scan proves something scanning-capable was linked at some point,
     # even if the live scanner/agent check above errored (e.g. an API key with
-    # insufficient scope for /agents). Don't tell a customer to "link a
+    # insufficient scope for /agents). Don't tell a user to "link a
     # scanner/agent" when their scan history already contradicts that.
     linked = bool(has_network) or bool(has_agent) or has_completed
 

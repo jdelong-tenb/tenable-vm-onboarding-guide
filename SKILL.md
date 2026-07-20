@@ -187,6 +187,22 @@ an end user who didn't bring it up themselves; instead:
 - Tagging isn't a hard blocker to viewing findings — mention it's available but
   don't block the `view_findings` conversation on it if the user just wants
   to see their results first.
+- A newly created dynamic tag (one with an IP/OS/business-unit filter rather
+  than a manually-assigned static tag) doesn't populate with matching assets
+  instantly — Tenable evaluates the rule against the asset inventory in the
+  background, and the tag sits in a `WAITING` status (visible in Settings >
+  Tags) until that finishes. Confirmed live: ~20 minutes for a ~60-asset
+  account, roughly matching Tenable's own guidance that this scales with
+  asset count (typically 10-15 min, longer for larger inventories). If the
+  user checks Inventory/Exposure Management right after creating a tag and
+  sees "No data available... you must first generate data by creating tags,"
+  that's this same lag, not a failure — the tag exists (confirmed immediately
+  via the tags API/Hexa), it just hasn't finished matching assets yet. Tell
+  them to check Settings > Tags for a `WAITING` vs `COMPLETE` status rather
+  than re-creating the tag or assuming Hexa failed. If the status stays
+  `WAITING` well past ~30 minutes, or shows an error in the rule detail box,
+  that's worth troubleshooting the filter itself (Settings > Tags > click
+  into the tag to see the rule) rather than waiting further.
 
 ### `view_findings`
 Everything is working — scanner/agent linked, a scan completed, and there are
@@ -197,6 +213,16 @@ underlying findings, but users who only look at Explore undercount what
 they've actually found. Ask if they want a walkthrough of reading a specific
 finding (severity, plugin output, remediation) or if they're comfortable
 exploring on their own from here.
+
+Confirmed live on a two-scan account: pointing a user at a single scan's
+Vulnerabilities tab undercounts the same way Explore does if they have more
+than one active scan (e.g. separate scans per site/location) — one scan
+showed 80 vuln instances, the other 47, account-wide total 128. If
+`most_recent_scan_name` is the only scan you mention and the account
+plausibly has more than one (ask, or note if `linked_scanner_count` > 1
+hints at multiple sites), say "check each of your scans, or use the
+account-wide Vulnerabilities workbench for the full picture" rather than
+pointing at just the one scan the status check happened to surface.
 
 ## Known limitations (do not overclaim these)
 
@@ -226,6 +252,15 @@ exploring on their own from here.
   instructions when they're not. It does not verify Hexa MCP's tag creation
   succeeded; if the user says a Hexa-created tag isn't showing up, re-run
   the status check rather than assuming success.
+- **`tag_count` reflects tag definitions, not finished asset-matching.**
+  `check_tags()` hits `/tags/values?limit=1`, which counts tag category/value
+  pairs that exist — it does not wait for or reflect whether a dynamic tag's
+  filter rule has finished matching assets (see the `setup_tagging` WAITING
+  note above). A nonzero `tag_count` right after Hexa creates a tag is real
+  and correct; it does not mean the tag has any assets visible yet in
+  Tenable One / Exposure Management's Inventory view. Don't treat "Inventory
+  shows no data for this tag" as contradicting a nonzero `tag_count` — they
+  measure different things.
 - **Connectivity check is TCP-only, not a full API health check.** `check_connectivity()`
   only confirms a bare TCP handshake to `cloud.tenable.com:443` — it doesn't
   validate TLS or exercise the actual API. A TLS-intercepting proxy can pass

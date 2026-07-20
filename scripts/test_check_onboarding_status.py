@@ -69,13 +69,18 @@ class ApiGetTests(unittest.TestCase):
 class CheckFindingsTests(unittest.TestCase):
     @patch("check_onboarding_status.api_get")
     def test_explicit_zero_vuln_count_is_not_masked(self, mock_api_get):
-        mock_api_get.return_value = {"total_vuln_count": 0, "total": 999}
+        mock_api_get.return_value = {"total_vulnerability_count": 0}
         self.assertEqual(cos.check_findings("a", "s"), 0)
 
     @patch("check_onboarding_status.api_get")
-    def test_falls_back_to_total_when_total_vuln_count_missing(self, mock_api_get):
-        mock_api_get.return_value = {"total": 42}
+    def test_reads_total_vulnerability_count(self, mock_api_get):
+        mock_api_get.return_value = {"total_vulnerability_count": 42}
         self.assertEqual(cos.check_findings("a", "s"), 42)
+
+    @patch("check_onboarding_status.api_get")
+    def test_missing_field_defaults_to_zero(self, mock_api_get):
+        mock_api_get.return_value = {}
+        self.assertEqual(cos.check_findings("a", "s"), 0)
 
 
 class MainStageTests(unittest.TestCase):
@@ -121,7 +126,7 @@ class MainStageTests(unittest.TestCase):
             "/scans": {"scans": [
                 {"name": "Old Scan", "status": "completed", "last_modification_date": 100},
             ]},
-            "/workbenches/vulnerabilities": {"total_vuln_count": 5},
+            "/workbenches/vulnerabilities": {"total_vulnerability_count": 5},
             "/tags/values": {"pagination": {"total": 3}},
         })
         self.assertNotEqual(result["onboarding_stage"], "link_scanner_or_agent")
@@ -137,7 +142,7 @@ class MainStageTests(unittest.TestCase):
                 {"name": "Old Scan", "status": "completed", "last_modification_date": 100},
                 {"name": "Fresh Scan", "status": "aborted", "last_modification_date": 999},
             ]},
-            "/workbenches/vulnerabilities": {"total_vuln_count": 5},
+            "/workbenches/vulnerabilities": {"total_vulnerability_count": 5},
             "/tags/values": {"pagination": {"total": 3}},
         })
         self.assertEqual(result["most_recent_scan_status"], "aborted")
@@ -150,7 +155,7 @@ class MainStageTests(unittest.TestCase):
             "/scans": {"scans": [
                 {"name": "Scan", "status": "completed", "last_modification_date": 100},
             ]},
-            "/workbenches/vulnerabilities": {"total_vuln_count": 5},
+            "/workbenches/vulnerabilities": {"total_vulnerability_count": 5},
             "/tags/values": {"pagination": {"total": 0}},
         })
         self.assertEqual(result["onboarding_stage"], "setup_tagging")
@@ -162,7 +167,7 @@ class MainStageTests(unittest.TestCase):
             "/scans": {"scans": [
                 {"name": "Scan", "status": "completed", "last_modification_date": 100},
             ]},
-            "/workbenches/vulnerabilities": {"total_vuln_count": 5},
+            "/workbenches/vulnerabilities": {"total_vulnerability_count": 5},
             "/tags/values": RuntimeError("API error 403 on /tags/values: denied"),
         })
         self.assertIn("tag_check_error", result)
@@ -178,7 +183,7 @@ class MainStageTests(unittest.TestCase):
             "/scans": {"scans": [
                 {"name": "Scan", "status": "completed", "last_modification_date": 100},
             ]},
-            "/workbenches/vulnerabilities": {"total_vuln_count": 0},
+            "/workbenches/vulnerabilities": {"total_vulnerability_count": 0},
             "/tags/values": {"pagination": {"total": 3}},
         })
         self.assertEqual(result["onboarding_stage"], "review_scan_status")
@@ -190,7 +195,7 @@ class MainStageTests(unittest.TestCase):
             "/scans": {"scans": [
                 {"name": "Scan", "status": "completed", "last_modification_date": 100},
             ]},
-            "/workbenches/vulnerabilities": {"total_vuln_count": 5},
+            "/workbenches/vulnerabilities": {"total_vulnerability_count": 5},
             "/tags/values": {"pagination": {"total": 3}},
         })
         self.assertEqual(result["onboarding_stage"], "view_findings")

@@ -108,9 +108,7 @@ def check_findings(access_key, secret_key):
     Raises RuntimeError on API failure — the caller distinguishes a confirmed
     zero count from a check that couldn't run."""
     data = api_get("/workbenches/vulnerabilities?date_range=30", access_key, secret_key)
-    count = data.get("total_vuln_count")
-    if count is None:
-        count = data.get("total")
+    count = data.get("total_vulnerability_count")
     return count if count is not None else 0
 
 
